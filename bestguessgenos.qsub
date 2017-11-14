@@ -1,0 +1,71 @@
+#!/bin/bash
+#PBS -V
+
+while getopts i:f:b:d:o:n:m: option
+do
+  case "${option}"
+    in
+      i) info_th=${OPTARG};;
+      f) freq_th=${OPTARG};;
+      b) bg_th=${OPTARG};;
+      d) input_dir=${OPTARG};;
+      o) output_dir=${OPTARG};;
+      n) nodesize=${OPTARG};;
+      m) bgmode=${OPTARG};;
+    esac
+done
+
+#Set minimum info, MAF, and probability (only applies to best guess) for SNP inclusion
+# info_th=0
+# freq_th=0
+# bg_th=0.8
+
+#If using the default mode, use the ricopili default script to make this file (makes also the strict best guess data)
+#The other only makes un-qced best guess genotypes
+if [ bgmode == "adam" ]
+then
+ bgscript=daner_bg3 # daner_bg3_nov6_2017
+else
+ bgscript=daner_bg3_nov6_2017
+fi
+
+echo "Input dir is $input_dir . Output dir is $output_dir"
+echo "Using $bgscript for processing"
+
+#List all input files, only the .gz dosages
+ls $input_dir | grep dosage.gz$  > "$TMPDIR"/$filelist.txt
+
+
+#Determine how many files there are 
+ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
+
+#Make best guess genotypes
+ nodeuse=$nodesize # $(($nodesize ))
+ echo "Using $nodeuse nodes"
+ totjobs=$(( ($ncommands + $nodeuse - 1 ) / $nodeuse ))
+
+ for i in $(seq 1 1 $totjobs)
+ do
+  jstart=$((($i-1)*$nodesize +1))
+  jstop=$(($i*$nodesize))
+
+  min=$([ $ncommands -le $jstop ] && echo "$ncommands" || echo "$jstop")
+  jstop=$min
+  for j in $(seq $jstart 1 $jstop)
+  do
+   #Read Nth line of file, get rid of the "dos_" prefix, get rid of the ".out.dosage.gz" suffix
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   fileline=$(echo $fileline_full | sed 's/^dos_//g' | sed 's/.out.dosage.gz//g')
+   echo "Converting $fileline to best guess with info threshold $info_th, frequency threshold $freq_th, "
+   if [ ! -f "$output_dir"/qc1/"$fileline_full".fini ]
+   then
+    cp "$input_dir"/"$fileine"* $TMPDIR
+    $bgscript --info_th $info_th --freq_th $freq_th --bg_th $bg_th --indir "$TMPDIR" --outdir "$output_dir" $fileline &
+   else
+    echo "It seems that $fileline has already been processed. If that is not the case, delete the .fini file for this file in the qc1 folder"
+   fi
+  done
+  wait #wait for jobs to finish before starting next set
+ 
+ done 
+ 

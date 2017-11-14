@@ -1,0 +1,37 @@
+
+while getopts d:o:t:s: option
+do
+  case "${option}"
+    in
+      d) indir=${OPTARG};;
+      o) outdir=${OPTARG};;
+      t) bgtype=${OPTARG};;
+      s) studyname=${OPTARG};;
+      
+    esac
+done
+
+#Set chromosome to array ID
+chr="$PBS_ARRAYID"
+
+#List input directory
+ls "$indir"/"$bgtype" | grep .ch.fl.chr"$chr"_ | grep .bim$ |   sed 's/.bim//g' |  sort -u | awk '{print $1".bed",$1".bim",$1".fam"}' > mergelist_"$studyname"_"$bgtype"_chr"$chr".txt
+
+#Copy this list to the tmpdir
+cp mergelist_"$studyname"_"$bgtype"_chr"$chr".txt  "$TMPDIR"/.
+
+#Copy all data to temp dir and merge
+cp "$indir"/"$bgtype"/* "$TMPDIR"
+
+#Load plink2 module
+module load plink2
+
+#call totemp dir
+cd "$TMPDIR"
+
+#Merge data
+plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"_chr"$chr"
+
+#Copy merged data to output directory
+echo "Copying data to  "$outdir"/"
+cp "$studyname"_"$bgtype"_chr"$chr".* "$outdir"/.
