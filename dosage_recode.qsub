@@ -1,0 +1,104 @@
+#!/bin/bash
+#PBS -V
+
+while getopts d:o:n:p:t:k:s:z:q: option
+do
+  case "${option}"
+    in
+      d) input_dir=${OPTARG};;
+      o) output_dir=${OPTARG};;
+      n) nodesize=${OPTARG};;
+      p) phenofile=${OPTARG};;
+      t) p2_loc=${OPTARG};;
+      k) keeplist=${OPTARG};;
+      s) snplist=${OPTARG};;
+      z) suffix=${OPTARG};;
+      q) p2a_loc=${OPTARG};;
+    esac
+done
+
+
+#Make best guess data using PLINK2
+
+echo "Plink2 executable is $p2_loc"
+echo "Input dir is $input_dir . Output dir is $output_dir"
+
+#List all input files, only the .gz dosages
+ls $input_dir | grep dosage.gz$  > "$TMPDIR"/$filelist.txt
+
+#If phenotype added, say so
+if [ $phenofile != "xxxx" ]
+then
+ phen="--pheno $phenofile"
+fi
+ 
+#If keepfile added, say so
+if [ $keeplist != "xxxx" ]
+then
+ keep="--keep $keeplist"
+fi
+
+#If snplist added, say so
+if [ $snplist != "xxxx" ]
+then
+ snps="--extract $snplist"
+fi
+
+if [ $suffix != "xxxx" ]
+then
+ suff="$suffix"
+fi
+
+
+#Determine how many files there are 
+ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
+
+#Make best guess genotypes
+ nodeuse=$nodesize # $(($nodesize ))
+ echo "Using $nodeuse nodes"
+ totjobs=$(( ($ncommands + $nodeuse - 1 ) / $nodeuse ))
+
+ for i in $(seq 1 1 $totjobs)
+ do
+  jstart=$((($i-1)*$nodesize +1))
+  jstop=$(($i*$nodesize))
+
+  min=$([ $ncommands -le $jstop ] && echo "$ncommands" || echo "$jstop")
+  jstop=$min
+  for j in $(seq $jstart 1 $jstop)
+  do
+   #Read Nth line of file, get rid of the ".gz" suffix
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   fileline=$(echo $fileline_full | sed 's/.gz//g')
+   fileline_short=$(echo $fileline_full | sed 's/.out.dosage.gz//g')
+   echo "Converting $fileline dosages data with snplist  "
+   if [ ! -f "$output_dir"/bgn/"$suff""$fileline_short".fini ]
+   then
+    cp "$input_dir"/"$fileline".* "$TMPDIR"
+    $p2_loc  --memory 1000 --dosage "$TMPDIR"/"$fileline".gz   Zout --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --write-dosage --out "$output_dir"/"$suff""$fileline_short"  &
+    #This is slightly sketchy to make the .fam files but it should work..
+    $p2a_loc --memory 1000 --import-dosage "$TMPDIR"/"$fileline".gz --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --make-just-bim --out "$output_dir"/"$suff""$fileline_short" &
+    
+    
+    $p2_loc --memory 500 --fam "$TMPDIR"/"$fileline".fam  $keep $pheno --make-just-fam --allow-no-vars  --out "$output_dir"/"$suff""$fileline"  &
+    
+   else
+    echo "It seems that $fileline has already been processed. If that is not the case, delete the .fini file for this file in the qc1 folder"
+   fi
+  done
+  wait #wait for jobs to finish before starting next set
+  #If phenotype updating was selected, do so now...
+ 
+
+  #Also make .fini files after jobs finish
+  for j in $(seq $jstart 1 $jstop)
+  do
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   fileline_short=$(echo $fileline_full | sed 's/.out.dosage.gz//g')
+   touch "$output_dir"/"$suff""$fileline_short".fini
+   #touch "$output_dir"/"$fileline_full".fini
+   awk '{print $1,$2,$3,$4}' "$output_dir"/"$suff""$fileline_short".bim > "$output_dir"/"$suff""$fileline_short".out.dosage.map
+  done
+  
+ done 
+ 

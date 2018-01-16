@@ -1,0 +1,93 @@
+#!/bin/bash
+#PBS -V
+
+while getopts i:f:d:o:n:p:t:k: option
+do
+  case "${option}"
+    in
+      i) info_th=${OPTARG};;
+      f) freq_th=${OPTARG};;
+      d) input_dir=${OPTARG};;
+      o) output_dir=${OPTARG};;
+      n) nodesize=${OPTARG};;
+      p) phenofile=${OPTARG};;
+      t) p2_loc=${OPTARG};;
+      k) keeplist=${OPTARG};;
+    esac
+done
+
+
+#Make best guess data using PLINK2
+
+echo "Plink2 executable is $p2_loc"
+echo "Input dir is $input_dir . Output dir is $output_dir"
+
+#List all input files, only the .gz dosages
+ls $input_dir | grep dosage.gz$  > "$TMPDIR"/$filelist.txt
+
+echo "Sample of files being loaded"
+head "$TMPDIR"/$filelist.txt
+
+#If phenotype added, say so
+if [ $phenofile != "xxxx" ]
+then
+ phen="--pheno $phenofile"
+ echo "Using phenotype $phen"
+fi
+ 
+#If keepfile added, say so
+if [ $keeplist != "xxxx" ]
+then
+ keep="--keep $keeplist"
+ echo "Using keep command $keep"
+fi
+
+#Determine how many files there are 
+ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
+
+#Make best guess genotypes
+ nodeuse=$nodesize # $(($nodesize ))
+ echo "Using $nodeuse nodes"
+ totjobs=$(( ($ncommands + $nodeuse - 1 ) / $nodeuse ))
+
+ for i in $(seq 1 1 $totjobs)
+ do
+  jstart=$((($i-1)*$nodesize +1))
+  jstop=$(($i*$nodesize))
+
+  min=$([ $ncommands -le $jstop ] && echo "$ncommands" || echo "$jstop")
+  jstop=$min
+  for j in $(seq $jstart 1 $jstop)
+  do
+   #Read Nth line of file, get rid of the ".gz" suffix
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   fileline=$(echo $fileline_full | sed 's/.gz//g')
+   echo "Obtaining info stats and maf for all markers. Writing SNP list of markers with info > $info_th and maf > $freq_th"
+   if [ ! -f "$output_dir"//"$fileline_full".fini ]
+   then
+    echo "Reading file "$fileline_full""
+    cp "$input_dir"/"$fileline".* "$TMPDIR"
+    $p2_loc --memory 2000 --dosage "$TMPDIR"/"$fileline".gz --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno --linear --out "$output_dir"//"$fileline_full".noqc  &
+   else
+    echo "It seems that $fileline has already been processed. If that is not the case, delete the .fini file for this file in the qc1 folder"
+   fi
+  done
+  wait #wait for jobs to finish before starting next set
+  #If phenotype updating was selected, do so now...
+ 
+
+  
+  
+  #Make .fini files after jobs finish. Also reformat dosage data to 
+  for j in $(seq $jstart 1 $jstop)
+  do
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   awk '{print $2,$6,$7}' "$output_dir"//"$fileline_full".noqc.assoc.dosage > "$output_dir"//"$fileline_full".noqc.info
+   #Info score / Maf threshold filter
+   awk -v freq_th=$freq_th -v info_th=$info_th '{if ($6 >= freq_th && $6 <= (1 - freq_th) && $7 >= info_th) print $2}' "$output_dir"//"$fileline_full".noqc.assoc.dosage > "$output_dir"//"$fileline_full".info"$info_th"_maf"$freq_th".snplist
+   #I checked this SNPlist against doing it by hand in excel, it worked in my test case
+   touch "$output_dir"//"$fileline_full".fini
+  done
+  
+ done 
+ 

@@ -12,26 +12,33 @@ do
 done
 
 #Set chromosome to array ID
-chr="$PBS_ARRAYID"
+ chr="$PBS_ARRAYID"
 
 #List input directory
-ls "$indir"/"$bgtype" | grep .ch.fl.chr"$chr"_ | grep .bim$ |   sed 's/.bim//g' |  sort -u | awk '{print $1".bed",$1".bim",$1".fam"}' > mergelist_"$studyname"_"$bgtype"_chr"$chr".txt
+ ls "$indir" | grep .ch.fl.chr"$chr"_ | grep .bim$ |   sed 's/.bim//g' |  awk '{print $1".bed",$1".bim",$1".fam"}' > "$outdir"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt
 
 #Copy this list to the tmpdir
-cp mergelist_"$studyname"_"$bgtype"_chr"$chr".txt  "$TMPDIR"/.
+ cp "$outdir"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt  "$TMPDIR"/.
 
 #Copy all data to temp dir and merge
-cp "$indir"/"$bgtype"/* "$TMPDIR"
+ cp "$indir"/*chr"$chr"* "$TMPDIR"
 
 #Load plink2 module
-module load plink2
+ module load plink2
 
 #call totemp dir
-cd "$TMPDIR"
+ cd "$TMPDIR"
+
+#Decompress all gzips
+ for files in $(ls | grep .gz$)
+ do
+  gzip -d $files
+ done
+
 
 #Merge data
-plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"_chr"$chr"
+ plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"_chr"$chr"
 
 #Copy merged data to output directory
-echo "Copying data to  "$outdir"/"
-cp "$studyname"_"$bgtype"_chr"$chr".* "$outdir"/.
+ echo "Copying data to  "$outdir"/"
+ cp "$studyname"_"$bgtype"_chr"$chr".* "$outdir"/.

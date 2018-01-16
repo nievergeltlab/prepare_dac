@@ -1,0 +1,115 @@
+#!/bin/bash
+#PBS -V
+
+while getopts g:f:b:d:o:n:p:t:k:m:s: option
+do
+  case "${option}"
+    in
+      g) geno_th=${OPTARG};;
+      f) freq_th=${OPTARG};;
+      b) bg_th=${OPTARG};;
+      d) input_dir=${OPTARG};;
+      o) output_dir=${OPTARG};;
+      n) nodesize=${OPTARG};;
+      p) phenofile=${OPTARG};;
+      t) p2_loc=${OPTARG};;
+      k) keeplist=${OPTARG};;
+      m) bgmode=${OPTARG};;
+      s) snplist=${OPTARG};;
+    esac
+done
+
+
+#Make best guess data using PLINK2
+
+echo "Plink2 executable is $p2_loc"
+
+echo "Input dir is $input_dir . Output dir is $output_dir"
+
+#List all input files, only the .gz dosages
+ls $input_dir | grep dosage.gz$  > "$TMPDIR"/$filelist.txt
+
+#If phenotype added, say so
+if [ $phenofile != "xxxx" ]
+then
+ phen="--pheno $phenofile"
+fi
+ 
+#If keepfile added, say so
+if [ $keeplist != "xxxx" ]
+then
+ keep="--keep $keeplist"
+fi
+
+
+if [ $bgmode == "bgn" ]
+then
+ fileext="noqc"
+fi
+
+if [ $bgmode == "bg" ]
+then
+ fileext="qc1"
+fi
+
+if [ $bgmode == "bgs" ]
+then
+ fileext="qc2"
+fi
+
+if [ $geno_th != "xxxx" ]
+then
+ geno="--geno $geno_th"
+fi
+
+#If snplist added, say so
+if [ $snplist != "xxxx" ]
+then
+ snps="--extract $snplist"
+fi
+
+
+echo "Will use phenotype command $phen , for of pheno file $phenofile"
+#Determine how many files there are 
+ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
+
+#Make best guess genotypes
+ nodeuse=$nodesize # $(($nodesize ))
+ echo "Using $nodeuse nodes"
+ totjobs=$(( ($ncommands + $nodeuse - 1 ) / $nodeuse ))
+
+ for i in $(seq 1 1 $totjobs)
+ do
+  jstart=$((($i-1)*$nodesize +1))
+  jstop=$(($i*$nodesize))
+
+  min=$([ $ncommands -le $jstop ] && echo "$ncommands" || echo "$jstop")
+  jstop=$min
+  for j in $(seq $jstart 1 $jstop)
+  do
+   #Read Nth line of file, get rid of the ".gz" suffix
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   fileline=$(echo $fileline_full | sed 's/.gz//g')
+   echo "Converting $fileline to best guess with info threshold $info_th, frequency threshold $freq_th, "
+   if [ ! -f "$output_dir"/"$fileline_full"."$fileext".fini ]
+   then
+    cp "$input_dir"/"$fileline"* "$TMPDIR"
+    $p2_loc --memory 2000 --import-dosage "$TMPDIR"/"$fileline".gz --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map  --import-dosage-certainty $bg_th --hard-call-threshold .49999 $phen $keep --maf $freq_th $geno $snps --make-bed --out "$TMPDIR"/"$fileline_full"."$fileext"  &
+   else
+    echo "It seems that $fileline has already been processed. If that is not the case, delete the .fini file for this file in the qc1 folder"
+   fi
+  done
+  wait #wait for jobs to finish before starting next set
+
+  #Also make .fini files after jobs finish
+  for j in $(seq $jstart 1 $jstop)
+  do
+   #gzip bed data
+   gzip "$TMPDIR"/"$fileline_full"."$fileext".bed
+   mv "$TMPDIR"/"$fileline_full"."$fileext"* "$output_dir"/.
+   fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
+   touch "$output_dir"/"$fileline_full"."$fileext".fini
+  done
+  
+ done 
+ 
