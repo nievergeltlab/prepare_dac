@@ -25,7 +25,7 @@ echo "Plink2 executable is $p2_loc"
 echo "Input dir is $input_dir . Output dir is $output_dir"
 
 #List all input files, only the .gz dosages
-ls $input_dir | grep dosage.gz$  > "$TMPDIR"/$filelist.txt
+ls $input_dir | grep .fam$  > "$TMPDIR"/$filelist.txt
 
 #If phenotype added, say so
 if [ $phenofile != "xxxx" ]
@@ -80,12 +80,12 @@ ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
    echo "Converting $fileline dosages data with snplist  "
    if [ ! -f "$output_dir"/"$suff""$fileline_short".fini ]
    then
-    cp "$input_dir"/"$fileline".* "$TMPDIR"
-    $p2_loc  --memory 1000 --dosage "$TMPDIR"/"$fileline".gz   Zout --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --write-dosage --out "$output_dir"/"$suff""$fileline_short"  &
+    #cp "$input_dir"/"$fileline".* "$TMPDIR"
+    #$p2_loc  --memory 1000 --dosage "$TMPDIR"/"$fileline".gz   Zout --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --write-dosage --out "$output_dir"/"$suff""$fileline_short"  &
     #This is slightly sketchy to make the .bim files but it should work..
-    $p2a_loc --memory 1000 --import-dosage "$TMPDIR"/"$fileline".gz --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --make-just-bim --out "$output_dir"/X"$suff""$fileline_short" &
+    #$p2a_loc --memory 1000 --import-dosage "$TMPDIR"/"$fileline".gz --fam "$TMPDIR"/"$fileline".fam --map "$TMPDIR"/"$fileline".map $keep $pheno $snps --make-just-bim --out "$output_dir"/X"$suff""$fileline_short" &
     
-    
+    echo "doing nothing"
     
     
    else
@@ -101,8 +101,9 @@ ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
   do
    fileline_full=$(cat "$TMPDIR"/$filelist.txt | awk -v lineno=$j 'NR==lineno {print}'  )
    fileline_short=$(echo $fileline_full | sed 's/.out.dosage.gz//g')
-   fileline=$(echo $fileline_full | sed 's/.gz//g')
+   fileline=$(echo $fileline_full | sed 's/.fam//g')
    cp "$input_dir"/"$fileline".fam "$TMPDIR"
+   
    $p2_loc --memory 500 --fam "$TMPDIR"/"$fileline".fam  $keep $pheno $ssex --make-just-fam --allow-no-vars  --out "$output_dir"/"$suff""$fileline"  &
    awk '{print $1,$2,$3,$4}' "$output_dir"/X"$suff""$fileline_short".bim > "$output_dir"/"$suff""$fileline_short".out.dosage.map
    touch "$output_dir"/"$suff""$fileline_short".fini

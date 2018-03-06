@@ -12,19 +12,26 @@ do
 done
 
 #List input directory
-ls "$indir"/"$bgtype" |  grep .bim$ |  sed 's/.bim//g' |  sort -u | awk '{print $1".bed",$1".bim",$1".fam"}' > mergelist_"$studyname"_"$bgtype".txt
+ls "$indir"/"$bgtype" |  grep .bim$ |  sed 's/.bim//g' |   awk '{print $1".bed",$1".bim",$1".fam"}' > "$outdir"/mergelist_"$studyname"_"$bgtype".txt
 
 #Copy this list to the tmpdir
-cp mergelist_"$studyname"_"$bgtype".txt "$TMPDIR"/.
+cp "$outdir"/mergelist_"$studyname"_"$bgtype".txt "$TMPDIR"/.
 
 #Copy all data to temp dir and merge
 cp "$indir"/"$bgtype"/* "$TMPDIR"
+
 
 #Load plink2 module
 module load plink2
 
 #call totemp dir
 cd "$TMPDIR"
+
+#Decompress all gzips
+for files in $(ls | grep .gz$)
+do
+gzip -d $files
+done
 
 #Merge data
 plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"

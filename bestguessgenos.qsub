@@ -59,7 +59,7 @@ ncommands=$(wc -l "$TMPDIR"/$filelist.txt | awk '{print $1}')
    echo "Converting $fileline to best guess with info threshold $info_th, frequency threshold $freq_th, "
    if [ ! -f "$output_dir"/qc1/"$fileline_full".fini ]
    then
-    cp "$input_dir"/"$fileine"* $TMPDIR
+    cp "$input_dir"/*"$fileline"* $TMPDIR
     $bgscript --info_th $info_th --freq_th $freq_th --bg_th $bg_th --indir "$TMPDIR" --outdir "$output_dir" $fileline &
    else
     echo "It seems that $fileline has already been processed. If that is not the case, delete the .fini file for this file in the qc1 folder"

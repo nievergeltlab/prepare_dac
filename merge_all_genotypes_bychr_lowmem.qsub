@@ -12,8 +12,9 @@ do
 done
 
 #Set chromosome to array ID
- chr="$PBS_ARRAYID"
-
+# chr="$PBS_ARRAYID"
+for chr in {1..22}
+do
 #List input directory
  ls "$indir" | grep .ch.fl.chr"$chr"_ | grep .bim$ |   sed 's/.bim//g' |  awk '{print $1".bed",$1".bim",$1".fam"}' > "$outdir"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt
 
@@ -30,16 +31,26 @@ done
  cd "$TMPDIR"
 
 #Decompress all gzips
- for files in $(ls | grep .gz$)
+ for files in $(ls | grep chr"$chr"_ | grep  .gz$ )
  do
   gzip -d $files
  done
+done
 
 
+for chr in {1..22}
+do
 #Merge data
- plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"_chr"$chr"
+ plink --merge-list "$TMPDIR"/mergelist_"$studyname"_"$bgtype"_chr"$chr".txt --allow-no-sex --make-bed --out "$studyname"_"$bgtype"_chr"$chr" --memory 2000 &
+done
+wait
 
+for chr in {1..22}
+do
 #Copy merged data to output directory
  echo "Copying data to  "$outdir"/"
  gzip "$studyname"_"$bgtype"_chr"$chr".bed
  cp "$studyname"_"$bgtype"_chr"$chr".* "$outdir"/.
+
+done
+ 
